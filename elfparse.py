@@ -5,6 +5,7 @@ import struct
 import sys
 import os
 import re
+import curses
 from collections import defaultdict, Counter
 
 # ============================================================
@@ -234,6 +235,175 @@ R_AARCH64 = {
     1032: "R_AARCH64_IRELATIVE",
 }
 
+# Dynamic Tags
+DT = {
+    0: "DT_NULL",
+    1: "DT_NEEDED",
+    2: "DT_PLTRELSZ",
+    3: "DT_PLTGOT",
+    4: "DT_HASH",
+    5: "DT_STRTAB",
+    6: "DT_SYMTAB",
+    7: "DT_RELA",
+    8: "DT_RELASZ",
+    9: "DT_RELAENT",
+    10: "DT_STRSZ",
+    11: "DT_SYMENT",
+    12: "DT_INIT",
+    13: "DT_FINI",
+    14: "DT_SONAME",
+    15: "DT_RPATH",
+    16: "DT_SYMBOLIC",
+    17: "DT_REL",
+    18: "DT_RELSZ",
+    19: "DT_RELENT",
+    20: "DT_PLTREL",
+    21: "DT_DEBUG",
+    22: "DT_TEXTREL",
+    23: "DT_JMPREL",
+    24: "DT_BIND_NOW",
+    25: "DT_INIT_ARRAY",
+    26: "DT_FINI_ARRAY",
+    27: "DT_INIT_ARRAYSZ",
+    28: "DT_FINI_ARRAYSZ",
+    29: "DT_RUNPATH",
+    30: "DT_FLAGS",
+    32: "DT_ENCODING",
+    33: "DT_PREINIT_ARRAY",
+    34: "DT_PREINIT_ARRAYSZ",
+    35: "DT_SYMTAB_SHNDX",
+    0x6ffffd00: "DT_VALRNGLO",
+    0x6ffffef5: "DT_GNU_HASH",
+    0x6ffffff0: "DT_VERSYM",
+    0x6ffffff9: "DT_RELACOUNT",
+    0x6ffffffa: "DT_RELCOUNT",
+    0x6ffffffb: "DT_FLAGS_1",
+    0x6ffffffc: "DT_VERDEF",
+    0x6ffffffd: "DT_VERDEFNUM",
+    0x6ffffffe: "DT_VERNEED",
+    0x6fffffff: "DT_VERNEEDNUM",
+    0x7ffffffd: "DT_AUXILIARY",
+    0x7fffffff: "DT_FILTER",
+}
+
+# DT_FLAGS values
+DF_ORIGIN = 0x1
+DF_SYMBOLIC = 0x2
+DF_TEXTREL = 0x4
+DF_BIND_NOW = 0x8
+DF_STATIC_TLS = 0x10
+
+DT_FLAGS_BITS = {
+    DF_ORIGIN: "DF_ORIGIN",
+    DF_SYMBOLIC: "DF_SYMBOLIC",
+    DF_TEXTREL: "DF_TEXTREL",
+    DF_BIND_NOW: "DF_BIND_NOW",
+    DF_STATIC_TLS: "DF_STATIC_TLS",
+}
+
+# DT_FLAGS_1 values
+DF_1_NOW = 0x1
+DF_1_GLOBAL = 0x2
+DF_1_GROUP = 0x4
+DF_1_NODELETE = 0x8
+DF_1_LOADFLTR = 0x10
+DF_1_INITFIRST = 0x20
+DF_1_NOOPEN = 0x40
+DF_1_ORIGIN = 0x80
+DF_1_DIRECT = 0x100
+DF_1_TRANS = 0x200
+DF_1_INTERPOSE = 0x400
+DF_1_NODEFLIB = 0x800
+DF_1_NODUMP = 0x1000
+DF_1_CONFALT = 0x2000
+DF_1_ENDFILTEE = 0x4000
+DF_1_DISPRELDNE = 0x8000
+DF_1_DISPRELPND = 0x10000
+DF_1_NODIRECT = 0x20000
+DF_1_IGNMULDEF = 0x40000
+DF_1_NOKSYMS = 0x80000
+DF_1_NOHDR = 0x100000
+DF_1_EDITED = 0x200000
+DF_1_NORELOC = 0x400000
+DF_1_SYMINTPOSE = 0x800000
+DF_1_GLOBAUDIT = 0x1000000
+DF_1_SINGLETON = 0x2000000
+DF_1_PIE = 0x08000000
+
+DT_FLAGS_1_BITS = {
+    DF_1_NOW: "DF_1_NOW",
+    DF_1_GLOBAL: "DF_1_GLOBAL",
+    DF_1_GROUP: "DF_1_GROUP",
+    DF_1_NODELETE: "DF_1_NODELETE",
+    DF_1_LOADFLTR: "DF_1_LOADFLTR",
+    DF_1_INITFIRST: "DF_1_INITFIRST",
+    DF_1_NOOPEN: "DF_1_NOOPEN",
+    DF_1_ORIGIN: "DF_1_ORIGIN",
+    DF_1_DIRECT: "DF_1_DIRECT",
+    DF_1_INTERPOSE: "DF_1_INTERPOSE",
+    DF_1_NODEFLIB: "DF_1_NODEFLIB",
+    DF_1_NODUMP: "DF_1_NODUMP",
+    DF_1_PIE: "DF_1_PIE",
+}
+
+# Common Linux library paths
+COMMON_LIB_PATHS = [
+    "/lib", "/lib64", "/usr/lib", "/usr/lib64",
+    "/lib/x86_64-linux-gnu", "/usr/lib/x86_64-linux-gnu",
+    "/lib/aarch64-linux-gnu", "/usr/lib/aarch64-linux-gnu",
+    "/usr/local/lib", "/opt/lib",
+]
+
+# GNU Version structures
+VERNEED_HASH_OFFSET = 0
+VERNEED_FLAGS_OFFSET = 4
+VERNEED_VERSION_OFFSET = 6
+VERNEED_NEXT_OFFSET = 8
+VERNEED_CNT_OFFSET = 10
+VERNEED_AUX_OFFSET = 12
+VERNEED_NAME_OFFSET = 16
+VERNEED_SIZE = 20
+
+VERNAUX_HASH_OFFSET = 0
+VERNAUX_HALF_OFFSET = 4
+VERNAUX_NAME_OFFSET = 6
+VERNAUX_NEXT_OFFSET = 8
+VERNAUX_SIZE = 12
+
+# ANSI Color codes
+class Colors:
+    HEADER = '\033[95m'
+    OKBLUE = '\033[94m'
+    OKCYAN = '\033[96m'
+    OKGREEN = '\033[92m'
+    WARNING = '\033[93m'
+    FAIL = '\033[91m'
+    ENDC = '\033[0m'
+    BOLD = '\033[1m'
+    UNDERLINE = '\033[4m'
+    DIM = '\033[2m'
+
+def color_enabled():
+    return sys.stdout.isatty()
+
+def cgreen(text):
+    return (Colors.OKGREEN + text + Colors.ENDC) if color_enabled() else text
+
+def cred(text):
+    return (Colors.FAIL + text + Colors.ENDC) if color_enabled() else text
+
+def cyellow(text):
+    return (Colors.WARNING + text + Colors.ENDC) if color_enabled() else text
+
+def cblue(text):
+    return (Colors.OKBLUE + text + Colors.ENDC) if color_enabled() else text
+
+def ccyan(text):
+    return (Colors.OKCYAN + text + Colors.ENDC) if color_enabled() else text
+
+def cbold(text):
+    return (Colors.BOLD + text + Colors.ENDC) if color_enabled() else text
+
 # ============================================================
 # ELF 解析器核心类
 # ============================================================
@@ -259,6 +429,10 @@ class ELFParser:
         self.symtab = []
         self.dynsym = []
         self.relocations = []
+        self.dynamic_entries = []
+        self.version_syms = []
+        self.version_needs = []
+        self.version_map = {}
 
         self._parse()
 
@@ -670,6 +844,494 @@ class ELFParser:
                 self.relocations.extend(self._parse_relocation_section(idx))
 
     # --------------------------------------------------------
+    # 动态段解析
+    # --------------------------------------------------------
+
+    def _get_dynstr_string(self, offset):
+        dynstr_idx = self.section_names.get('.dynstr', None)
+        if dynstr_idx is None:
+            return ''
+        dynstr_sec = self.section_headers[dynstr_idx]
+        strtab_off = dynstr_sec['sh_offset_int']
+        strtab_size = dynstr_sec['sh_size']
+        if offset >= strtab_size:
+            return ''
+        end = self.data.find(b'\x00', strtab_off + offset, strtab_off + strtab_size)
+        if end == -1:
+            end = strtab_off + strtab_size
+        return self.data[strtab_off + offset:end].decode('utf-8', errors='replace')
+
+    def _parse_dynamic(self):
+        dynamic_idx = self.section_names.get('.dynamic', None)
+        if dynamic_idx is None:
+            return
+
+        sec = self.section_headers[dynamic_idx]
+        entsize = sec['sh_entsize']
+        size = sec['sh_size']
+        if entsize == 0:
+            entsize = 16 if self.elf_class == ELFCLASS64 else 8
+
+        num_entries = size // entsize
+        data_off = sec['sh_offset_int']
+
+        string_tags = {1, 14, 15, 29}
+
+        for i in range(num_entries):
+            entry_off = data_off + i * entsize
+            if self.elf_class == ELFCLASS64:
+                (d_tag, d_val) = self._unpack('QQ', entry_off)
+            else:
+                (d_tag, d_val) = self._unpack('II', entry_off)
+
+            if d_tag == 0:
+                break
+
+            tag_str = DT.get(d_tag, f"Unknown (0x{d_tag:x})")
+            val_str = ''
+
+            if d_tag in string_tags:
+                val_str = self._get_dynstr_string(d_val)
+            elif d_tag == 30:
+                flags = []
+                for bit, name in DT_FLAGS_BITS.items():
+                    if d_val & bit:
+                        flags.append(name)
+                val_str = ' | '.join(flags) if flags else f"0x{d_val:x}"
+            elif d_tag == 0x6ffffffb:
+                flags = []
+                for bit, name in DT_FLAGS_1_BITS.items():
+                    if isinstance(bit, int) and d_val & bit:
+                        flags.append(name)
+                val_str = ' | '.join(flags) if flags else f"0x{d_val:x}"
+            else:
+                val_str = f"0x{d_val:x}"
+
+            self.dynamic_entries.append({
+                'index': i,
+                'd_tag': d_tag,
+                'd_tag_str': tag_str,
+                'd_val': d_val,
+                'd_val_str': val_str,
+            })
+
+    # --------------------------------------------------------
+    # 版本信息解析
+    # --------------------------------------------------------
+
+    def _parse_version_info(self):
+        versym_idx = self.section_names.get('.gnu.version', None)
+        verneed_idx = self.section_names.get('.gnu.version_r', None)
+
+        if versym_idx is not None and len(self.dynsym) > 0:
+            sec = self.section_headers[versym_idx]
+            data_off = sec['sh_offset_int']
+            num_syms = len(self.dynsym)
+            for i in range(min(num_syms, sec['sh_size'] // 2)):
+                (ver_idx,) = self._unpack('H', data_off + i * 2)
+                self.version_syms.append({
+                    'sym_index': i,
+                    'ver_idx': ver_idx,
+                    'is_local': (ver_idx == 0),
+                    'is_global': (ver_idx == 1),
+                })
+
+        if verneed_idx is not None:
+            dynstr_idx = self.section_names.get('.dynstr', None)
+            dynstr_off = 0
+            dynstr_size = 0
+            if dynstr_idx is not None:
+                dynstr_off = self.section_headers[dynstr_idx]['sh_offset_int']
+                dynstr_size = self.section_headers[dynstr_idx]['sh_size']
+
+            sec = self.section_headers[verneed_idx]
+            data_off = sec['sh_offset_int']
+            data_end = data_off + sec['sh_size']
+            base = data_off
+
+            while data_off < data_end:
+                (vn_file, vn_flags, vn_ver, vn_cnt, vn_aux, vn_next) = self._unpack('IHHHHH', data_off)
+
+                file_name = ''
+                if dynstr_off > 0 and vn_file < dynstr_size:
+                    end = self.data.find(b'\x00', dynstr_off + vn_file, dynstr_off + dynstr_size)
+                    if end != -1:
+                        file_name = self.data[dynstr_off + vn_file:end].decode('utf-8', errors='replace')
+
+                aux_off = base + vn_aux
+                auxes = []
+                for j in range(vn_cnt):
+                    if aux_off >= data_end:
+                        break
+                    (vna_hash, vna_flags, vna_other, vna_name, vna_next) = self._unpack('IHHHH', aux_off)
+
+                    ver_name = ''
+                    if dynstr_off > 0 and vna_name < dynstr_size:
+                        end = self.data.find(b'\x00', dynstr_off + vna_name, dynstr_off + dynstr_size)
+                        if end != -1:
+                            ver_name = self.data[dynstr_off + vna_name:end].decode('utf-8', errors='replace')
+
+                    ver_idx = vna_other
+                    auxes.append({
+                        'hash': hex(vna_hash),
+                        'flags': vna_flags,
+                        'ver_idx': ver_idx,
+                        'version': ver_name,
+                    })
+
+                    if vna_next == 0:
+                        break
+                    aux_off += vna_next
+
+                self.version_needs.append({
+                    'file': file_name,
+                    'flags': vn_flags,
+                    'version_entries': auxes,
+                })
+
+                if vn_next == 0:
+                    break
+                data_off += vn_next
+
+            for sym_ver in self.version_syms:
+                ver_idx = sym_ver['ver_idx']
+                if ver_idx == 0:
+                    self.version_map[sym_ver['sym_index']] = 'local'
+                elif ver_idx == 1:
+                    self.version_map[sym_ver['sym_index']] = 'global'
+                else:
+                    for vn in self.version_needs:
+                        for aux in vn['version_entries']:
+                            if aux['ver_idx'] == ver_idx:
+                                self.version_map[sym_ver['sym_index']] = f"{vn['file']}@{aux['version']}"
+
+    # --------------------------------------------------------
+    # 安全特性检测
+    # --------------------------------------------------------
+
+    def check_security(self):
+        result = {}
+
+        has_gnu_relro = False
+        has_bind_now = False
+        for ph in self.program_headers:
+            if ph['p_type'] == 0x6474e552:
+                has_gnu_relro = True
+                break
+
+        for de in self.dynamic_entries:
+            if de['d_tag'] == 24:
+                has_bind_now = True
+            if de['d_tag'] == 0x6ffffffb:
+                if de['d_val'] & DF_1_NOW:
+                    has_bind_now = True
+
+        if has_gnu_relro and has_bind_now:
+            result['RELRO'] = ('Full RELRO', True)
+        elif has_gnu_relro:
+            result['RELRO'] = ('Partial RELRO', True)
+        else:
+            result['RELRO'] = ('No RELRO', False)
+
+        has_canary = False
+        all_syms = self.symtab + self.dynsym
+        for sym in all_syms:
+            if sym['st_name_str'] == '__stack_chk_fail':
+                has_canary = True
+                break
+        result['Stack Canary'] = ('Enabled' if has_canary else 'Disabled', has_canary)
+
+        is_pie = False
+        if self.elf_header['e_type'] == ET_DYN:
+            has_soname = any(de['d_tag'] == 14 for de in self.dynamic_entries)
+            if not has_soname:
+                is_pie = True
+        result['PIE'] = ('Enabled' if is_pie else 'Disabled', is_pie)
+
+        has_nx = True
+        for ph in self.program_headers:
+            if ph['p_type'] == 0x6474e551:
+                if ph['p_flags'] & PF_X:
+                    has_nx = False
+                break
+        result['NX'] = ('Enabled' if has_nx else 'Disabled', has_nx)
+
+        has_fortify = False
+        fortify_funcs = set()
+        for sym in all_syms:
+            name = sym['st_name_str']
+            if name.endswith('_chk') and name.startswith('__'):
+                has_fortify = True
+                fortify_funcs.add(name)
+        result['FORTIFY'] = ('Enabled (' + ', '.join(sorted(fortify_funcs)) + ')' if has_fortify else 'Disabled', has_fortify)
+
+        return result
+
+    # --------------------------------------------------------
+    # 控制流图生成
+    # --------------------------------------------------------
+
+    def _get_section_data(self, sec_name):
+        idx = self.section_names.get(sec_name, None)
+        if idx is None:
+            return b'', 0
+        sec = self.section_headers[idx]
+        off = sec['sh_offset_int']
+        sz = sec['sh_size']
+        if sz == 0:
+            return b'', sec['sh_addr_int']
+        return self.data[off:off + sz], sec['sh_addr_int']
+
+    def disassemble_cfg(self):
+        text_data, text_base = self._get_section_data('.text')
+        if not text_data:
+            return [], {}, []
+
+        instructions = []
+        i = 0
+        size = len(text_data)
+
+        while i < size:
+            byte = text_data[i]
+            instr = {
+                'offset': i,
+                'addr': text_base + i,
+                'bytes': [byte],
+                'mnemonic': 'db',
+                'size': 1,
+                'is_branch': False,
+                'branch_type': None,
+                'target': None,
+                'is_call': False,
+                'is_ret': False,
+            }
+
+            if byte == 0x90:
+                instr['mnemonic'] = 'nop'
+            elif byte == 0xc3:
+                instr['mnemonic'] = 'ret'
+                instr['is_ret'] = True
+                instr['is_branch'] = True
+                instr['branch_type'] = 'ret'
+            elif byte == 0xe8 and i + 5 <= size:
+                instr['mnemonic'] = 'call'
+                instr['size'] = 5
+                instr['bytes'] = list(text_data[i:i+5])
+                (disp,) = struct.unpack_from('<i', text_data, i + 1)
+                instr['target'] = text_base + i + 5 + disp
+                instr['is_branch'] = True
+                instr['is_call'] = True
+                instr['branch_type'] = 'call'
+            elif byte == 0xe9 and i + 5 <= size:
+                instr['mnemonic'] = 'jmp'
+                instr['size'] = 5
+                instr['bytes'] = list(text_data[i:i+5])
+                (disp,) = struct.unpack_from('<i', text_data, i + 1)
+                instr['target'] = text_base + i + 5 + disp
+                instr['is_branch'] = True
+                instr['branch_type'] = 'unconditional'
+            elif (byte & 0xf0) == 0x70 and i + 2 <= size:
+                cond_map = {
+                    0x70: 'jo', 0x71: 'jno', 0x72: 'jb', 0x73: 'jnb',
+                    0x74: 'je', 0x75: 'jne', 0x76: 'jbe', 0x77: 'jnbe',
+                    0x78: 'js', 0x79: 'jns', 0x7a: 'jp', 0x7b: 'jnp',
+                    0x7c: 'jl', 0x7d: 'jnl', 0x7e: 'jle', 0x7f: 'jnle',
+                }
+                instr['mnemonic'] = cond_map.get(byte, 'jcc')
+                instr['size'] = 2
+                instr['bytes'] = list(text_data[i:i+2])
+                (disp,) = struct.unpack_from('<b', text_data, i + 1)
+                instr['target'] = text_base + i + 2 + disp
+                instr['is_branch'] = True
+                instr['branch_type'] = 'conditional'
+            elif byte == 0x0f and i + 2 <= size:
+                byte2 = text_data[i + 1]
+                if (byte2 & 0xf0) == 0x80 and i + 6 <= size:
+                    cond_map2 = {
+                        0x80: 'jo', 0x81: 'jno', 0x82: 'jb', 0x83: 'jnb',
+                        0x84: 'je', 0x85: 'jne', 0x86: 'jbe', 0x87: 'jnbe',
+                        0x88: 'js', 0x89: 'jns', 0x8a: 'jp', 0x8b: 'jnp',
+                        0x8c: 'jl', 0x8d: 'jnl', 0x8e: 'jle', 0x8f: 'jnle',
+                    }
+                    instr['mnemonic'] = cond_map2.get(byte2, 'jcc')
+                    instr['size'] = 6
+                    instr['bytes'] = list(text_data[i:i+6])
+                    (disp,) = struct.unpack_from('<i', text_data, i + 2)
+                    instr['target'] = text_base + i + 6 + disp
+                    instr['is_branch'] = True
+                    instr['branch_type'] = 'conditional'
+                else:
+                    instr['size'] = self._guess_instr_size(text_data, i)
+                    if instr['size'] == 0:
+                        instr['size'] = 1
+                    instr['bytes'] = list(text_data[i:i+instr['size']])
+            else:
+                instr['size'] = self._guess_instr_size(text_data, i)
+                if instr['size'] == 0:
+                    instr['size'] = 1
+                instr['bytes'] = list(text_data[i:i+instr['size']])
+
+            instructions.append(instr)
+            i += instr['size']
+
+        branch_targets = set()
+        leader_addr = {instructions[0]['addr']} if instructions else set()
+
+        for instr in instructions:
+            if instr['is_branch']:
+                if instr['target'] is not None:
+                    branch_targets.add(instr['target'])
+                    leader_addr.add(instr['target'])
+                if instr['branch_type'] in ('conditional', 'call'):
+                    next_idx = instructions.index(instr) + 1
+                    if next_idx < len(instructions):
+                        leader_addr.add(instructions[next_idx]['addr'])
+
+        leader_list = sorted(leader_addr)
+        addr_to_block = {}
+        blocks = []
+
+        block_id = 0
+        for li, leader in enumerate(leader_list):
+            end_addr = leader_list[li + 1] if li + 1 < len(leader_list) else (text_base + size)
+            block_instrs = [ins for ins in instructions if leader <= ins['addr'] < end_addr]
+            if block_instrs:
+                block = {
+                    'id': block_id,
+                    'start': leader,
+                    'end': block_instrs[-1]['addr'] + block_instrs[-1]['size'],
+                    'instructions': block_instrs,
+                    'num_instrs': len(block_instrs),
+                    'successors': [],
+                }
+                blocks.append(block)
+                addr_to_block[leader] = block_id
+                block_id += 1
+
+        for block in blocks:
+            last_instr = block['instructions'][-1]
+            if last_instr['is_branch']:
+                if last_instr['target'] is not None and last_instr['target'] in addr_to_block:
+                    succ_id = addr_to_block[last_instr['target']]
+                    edge_type = last_instr['branch_type']
+                    block['successors'].append((succ_id, edge_type))
+                if last_instr['branch_type'] in ('conditional', 'call'):
+                    fallthrough_addr = block['end']
+                    if fallthrough_addr in addr_to_block:
+                        succ_id = addr_to_block[fallthrough_addr]
+                        edge_type = 'fallthrough' if last_instr['branch_type'] == 'conditional' else 'call-fallthrough'
+                        block['successors'].append((succ_id, edge_type))
+            else:
+                fallthrough_addr = block['end']
+                if fallthrough_addr in addr_to_block:
+                    succ_id = addr_to_block[fallthrough_addr]
+                    block['successors'].append((succ_id, 'fallthrough'))
+
+        func_entries = []
+        for sym in self.symtab + self.dynsym:
+            if sym['st_type'] == 2:
+                func_entries.append({
+                    'name': sym['st_name_str'] or f'func_{sym["st_value"]}',
+                    'addr': sym['st_value_int'],
+                    'size': sym['st_size'],
+                })
+        func_entries.sort(key=lambda x: x['addr'])
+
+        return blocks, addr_to_block, func_entries
+
+    def _guess_instr_size(self, data, offset):
+        size = 1
+        if offset >= len(data):
+            return 1
+        b = data[offset]
+
+        if b in (0x48, 0x4c, 0x4d, 0x49, 0x44, 0x45, 0x46, 0x47):
+            if offset + 1 < len(data):
+                b2 = data[offset + 1]
+                if b2 in (0x89, 0x8b, 0x8d, 0x83, 0x81, 0x3b, 0x39, 0x85, 0x8a):
+                    size = 3
+                    if offset + 2 < len(data):
+                        modrm = data[offset + 2]
+                        mod = (modrm >> 6) & 3
+                        rm = modrm & 7
+                        if mod == 0 and rm == 5:
+                            size = 7
+                        elif mod == 0 and rm == 4:
+                            size = 4
+                        elif mod == 2:
+                            size += 4
+                        elif mod == 1:
+                            size += 1
+                elif b2 in (0xc7, 0xc1):
+                    size = 7
+                elif b2 in (0x55, 0x5d, 0x50, 0x58, 0x53, 0x5b, 0x52, 0x5a, 0x51, 0x59):
+                    size = 2
+                elif b2 in (0xec, 0xe4, 0xe5, 0xc9, 0xcc, 0xc3):
+                    size = 2
+                elif b2 == 0xff:
+                    size = 3
+                else:
+                    size = 2
+            else:
+                size = 1
+        elif b in (0x55, 0x5d, 0x50, 0x58, 0x53, 0x5b, 0x52, 0x5a, 0x51, 0x59, 0x54, 0x5c, 0x56, 0x5e, 0x57, 0x5f):
+            size = 1
+        elif b in (0x89, 0x8b, 0x8d, 0x3b, 0x39, 0x85, 0x8a):
+            size = 2
+            if offset + 1 < len(data):
+                modrm = data[offset + 1]
+                mod = (modrm >> 6) & 3
+                rm = modrm & 7
+                if mod == 0 and rm == 5:
+                    size = 6
+                elif mod == 0 and rm == 4:
+                    size = 3
+                elif mod == 2:
+                    size += 4
+                elif mod == 1:
+                    size += 1
+        elif b in (0xc7, 0xc1):
+            size = 6
+        elif b in (0xb8, 0xb9, 0xba, 0xbb, 0xbc, 0xbd, 0xbe, 0xbf):
+            size = 5
+        elif b in (0x83, 0x81):
+            size = 3
+            if offset + 1 < len(data):
+                modrm = data[offset + 1]
+                mod = (modrm >> 6) & 3
+                rm = modrm & 7
+                if mod == 0 and rm == 5:
+                    size = 7 if b == 0x81 else 4
+                elif mod == 0 and rm == 4:
+                    size = 4
+                elif mod == 2:
+                    size += 4
+                elif mod == 1:
+                    size += 1
+        elif b == 0xff:
+            size = 2
+            if offset + 1 < len(data):
+                modrm = data[offset + 1]
+                reg = (modrm >> 3) & 7
+                if reg in (2, 3):
+                    size = 2
+        elif b in (0x01, 0x03, 0x08, 0x0a, 0x29, 0x2b, 0x31, 0x33, 0x88, 0x8c, 0x8e):
+            size = 2
+        elif b in (0x66, 0xf2, 0xf3):
+            size = 2
+        elif b in (0xc9, 0xcc, 0xc2, 0xca, 0xcf):
+            size = 1 if b in (0xc9, 0xcc, 0xcf) else (3 if b in (0xc2, 0xca) else 1)
+        elif b in (0xf4, 0xfb, 0xf5, 0xfc, 0xf8, 0xf9, 0xfa, 0xf7):
+            if b == 0xf7 and offset + 1 < len(data):
+                size = 3
+            else:
+                size = 1
+        else:
+            size = 1
+
+        return max(1, min(size, 15))
+
+    # --------------------------------------------------------
     # 主解析流程
     # --------------------------------------------------------
 
@@ -679,6 +1341,8 @@ class ELFParser:
         self._parse_section_headers()
         self._parse_symbols()
         self._parse_relocations()
+        self._parse_dynamic()
+        self._parse_version_info()
 
     # --------------------------------------------------------
     # 字符串提取
@@ -828,6 +1492,9 @@ class ELFParser:
             'symtab': self.symtab,
             'dynsym': self.dynsym,
             'relocations': self.relocations,
+            'dynamic_entries': self.dynamic_entries,
+            'version_needs': self.version_needs,
+            'version_syms': self.version_syms,
         }
 
 
@@ -1018,7 +1685,16 @@ def print_sections(elf: ELFParser):
         print(f"  {s['name']:<20} {s['size']:>10} {s['pct_file']:>7.2f}% {s['pct_section']:>9.2f}%  {bar}")
 
 
-def _group_and_print_symbols(syms, title):
+def _get_symbol_version(elf, sym_index, is_dynsym):
+    if not is_dynsym:
+        return ''
+    ver = elf.version_map.get(sym_index, '')
+    if ver and ver not in ('local', 'global'):
+        return f" [{ver}]"
+    return ''
+
+
+def _group_and_print_symbols(elf, syms, title, is_dynsym=False):
     print_section(title)
     if not syms:
         print("  (No symbols)")
@@ -1033,9 +1709,10 @@ def _group_and_print_symbols(syms, title):
         print(f"\n  -- Symbol Type: {type_str} ({len(group)} symbols) --")
         print(f"  {'Num':>5} {'Value':>18} {'Size':>8} {'Bind':>8} {'Type':>8} {'Ndx':>10}  Name")
         for sym in group:
+            ver_str = _get_symbol_version(elf, sym['index'], is_dynsym)
             print(f"  {sym['index']:>5} {sym['st_value']:>18} {sym['st_size']:>8} "
                   f"{sym['st_bind_str']:>8} {sym['st_type_str']:>8} {sym['st_shndx_str']:>10}  "
-                  f"{sym['st_name_str']}")
+                  f"{sym['st_name_str']}{cyellow(ver_str)}")
 
 
 def print_symbols(elf: ELFParser, search=None):
@@ -1048,13 +1725,15 @@ def print_symbols(elf: ELFParser, search=None):
         print(f"  Found {len(found)} matching symbols.\n")
         print(f"  {'Table':>8} {'Num':>5} {'Value':>18} {'Size':>8} {'Bind':>8} {'Type':>8} {'Ndx':>10}  Name")
         for sym in found:
+            is_dyn = (sym['table'] == '.dynsym')
+            ver_str = _get_symbol_version(elf, sym['index'], is_dyn)
             print(f"  {sym['table']:>8} {sym['index']:>5} {sym['st_value']:>18} {sym['st_size']:>8} "
                   f"{sym['st_bind_str']:>8} {sym['st_type_str']:>8} {sym['st_shndx_str']:>10}  "
-                  f"{sym['st_name_str']}")
+                  f"{sym['st_name_str']}{cyellow(ver_str)}")
         return
 
-    _group_and_print_symbols(elf.symtab, "Symbol Table (.symtab)")
-    _group_and_print_symbols(elf.dynsym, "Dynamic Symbol Table (.dynsym)")
+    _group_and_print_symbols(elf, elf.symtab, "Symbol Table (.symtab)", is_dynsym=False)
+    _group_and_print_symbols(elf, elf.dynsym, "Dynamic Symbol Table (.dynsym)", is_dynsym=True)
 
 
 def print_relocations(elf: ELFParser):
@@ -1153,6 +1832,876 @@ def print_diff(diff_result, file1, file2):
         print(f"\n  Modified Symbols (0): (none)")
 
 
+# ============================================================
+# 动态段深度解析显示
+# ============================================================
+
+def _check_lib_exists(libname):
+    for path in COMMON_LIB_PATHS:
+        full = os.path.join(path, libname)
+        if os.path.exists(full):
+            return True, full
+    return False, None
+
+
+def print_dynamic(elf: ELFParser):
+    print_section("Dynamic Section (.dynamic) Deep Analysis")
+    if not elf.dynamic_entries:
+        print("  (No dynamic section)")
+        return
+
+    needed = []
+    paths = []
+    init_funcs = []
+    misc = []
+
+    for de in elf.dynamic_entries:
+        tag = de['d_tag']
+        if tag == 1:
+            needed.append(de)
+        elif tag in (15, 29):
+            paths.append(de)
+        elif tag in (12, 13, 25, 26, 33):
+            init_funcs.append(de)
+        else:
+            misc.append(de)
+
+    print_section("1. Shared Library Dependencies (DT_NEEDED)")
+    if needed:
+        print(f"  {'Library':<40} {'Status':<25} {'Found At'}")
+        for de in needed:
+            lib = de['d_val_str'] or f"offset_{de['d_val']}"
+            exists, found_at = _check_lib_exists(lib)
+            status = cgreen("EXISTS in common paths") if exists else cred("NOT FOUND in common paths")
+            found = found_at if exists else ''
+            print(f"  {lib:<40} {status:<25} {found}")
+        print(f"\n  Total dependencies: {len(needed)}")
+    else:
+        print("  (No dependencies)")
+
+    print_section("2. Library Search Paths (RPATH/RUNPATH)")
+    if paths:
+        for de in paths:
+            tag_str = de['d_tag_str']
+            val = de['d_val_str'] or hex(de['d_val'])
+            print(f"  {tag_str:<20} = {ccyan(val)}")
+    else:
+        print("  (No RPATH/RUNPATH configured)")
+
+    print_section("3. Initialization / Finalization Functions")
+    if init_funcs:
+        print(f"  {'Tag':<20} {'Address':>18}  {'Note'}")
+        for de in init_funcs:
+            tag = de['d_tag']
+            note = ''
+            if tag == 12:
+                note = 'Legacy init function'
+            elif tag == 13:
+                note = 'Legacy fini function'
+            elif tag == 25:
+                note = 'Init array (see .init_array)'
+            elif tag == 26:
+                note = 'Fini array (see .fini_array)'
+            elif tag == 33:
+                note = 'Pre-init array'
+            print(f"  {de['d_tag_str']:<20} {de['d_val_str']:>18}  {note}")
+    else:
+        print("  (No init/fini functions)")
+
+    print_section("4. Other Dynamic Entries")
+    if misc:
+        print(f"  {'Nr':>4} {'Tag':<22} {'Value / String'}")
+        for i, de in enumerate(misc):
+            print(f"  [{i:>2}] {de['d_tag_str']:<22} {de['d_val_str']}")
+    else:
+        print("  (None)")
+
+
+# ============================================================
+# 安全特性检测显示
+# ============================================================
+
+def print_security(elf: ELFParser):
+    print_section("ELF Security Hardening Features")
+    sec = elf.check_security()
+
+    col_w = 18
+    status_w = 22
+    desc_w = 30
+
+    header = f"  {'Feature':<{col_w}} {'Status':<{status_w}} {'Description'}"
+    print(header)
+    print(f"  {'-'*col_w} {'-'*status_w} {'-'*desc_w}")
+
+    items = [
+        ('RELRO', sec['RELRO'], 'GNU Relocation Read-Only'),
+        ('Stack Canary', sec['Stack Canary'], 'Stack smashing protection'),
+        ('PIE', sec['PIE'], 'Position Independent Executable'),
+        ('NX', sec['NX'], 'Non-Executable stack (DEP)'),
+        ('FORTIFY', sec['FORTIFY'], 'Source fortification (_chk variants)'),
+    ]
+
+    for name, (status_text, enabled), desc in items:
+        if enabled:
+            status = cgreen(f"[✓] {status_text}")
+        else:
+            status = cred(f"[✗] {status_text}")
+        print(f"  {name:<{col_w}} {status:<{status_w + 10}} {desc}")
+
+    score = sum(1 for _, (_, e), _ in items if e)
+    print(f"\n  Security Score: {score}/{len(items)} features enabled")
+
+
+# ============================================================
+# 控制流图生成显示
+# ============================================================
+
+def _edge_color(edge_type):
+    colors = {
+        'conditional': 'blue',
+        'unconditional': 'red',
+        'call': 'darkgreen',
+        'fallthrough': 'gray',
+        'call-fallthrough': 'green',
+        'ret': 'purple',
+    }
+    return colors.get(edge_type, 'black')
+
+
+def generate_cfg_dot(blocks, func_entries, output_path):
+    lines = ['digraph CFG {']
+    lines.append('    node [shape=box, style=filled, fillcolor="#f0f0f0", fontname="monospace"];')
+    lines.append('    edge [fontname="monospace", fontsize=10];')
+    lines.append('    rankdir=TB;')
+    lines.append('')
+
+    func_addr_to_name = {}
+    for f in func_entries:
+        func_addr_to_name[f['addr']] = f['name']
+
+    lines.append('    // Function entry point clusters')
+    for fi, func in enumerate(func_entries):
+        func_blocks = []
+        for blk in blocks:
+            if blk['start'] == func['addr'] or (fi + 1 < len(func_entries) and func['addr'] <= blk['start'] < func_entries[fi + 1]['addr']):
+                func_blocks.append(blk)
+            elif fi + 1 >= len(func_entries) and blk['start'] >= func['addr']:
+                func_blocks.append(blk)
+        if func_blocks:
+            lines.append(f'    subgraph cluster_func_{fi} {{')
+            lines.append(f'        label="{func["name"]} @ {hex(func["addr"])}";')
+            lines.append(f'        style=dashed;')
+            for blk in func_blocks:
+                label = f"BB{blk['id']}\\nStart: {hex(blk['start'])}\\nInstrs: {blk['num_instrs']}"
+                lines.append(f'        bb{blk["id"]} [label="{label}"];')
+            lines.append(f'    }}')
+            lines.append('')
+
+    standalone = [b for b in blocks if b['start'] not in func_addr_to_name]
+    if standalone:
+        lines.append('    // Standalone basic blocks')
+        for blk in standalone:
+            label = f"BB{blk['id']}\\nStart: {hex(blk['start'])}\\nInstrs: {blk['num_instrs']}"
+            lines.append(f'    bb{blk["id"]} [label="{label}"];')
+        lines.append('')
+
+    lines.append('    // Control flow edges')
+    for blk in blocks:
+        for (succ_id, edge_type) in blk['successors']:
+            color = _edge_color(edge_type)
+            lines.append(f'    bb{blk["id"]} -> bb{succ_id} [label="{edge_type}", color="{color}"];')
+
+    lines.append('}')
+
+    with open(output_path, 'w', encoding='utf-8') as f:
+        f.write('\n'.join(lines))
+    return len(lines)
+
+
+def print_cfg(elf: ELFParser, output_path=None):
+    print_section("Control Flow Graph (CFG) Analysis")
+    blocks, addr_to_block, func_entries = elf.disassemble_cfg()
+
+    if not blocks:
+        print("  (No .text section or empty - CFG not available)")
+        return
+
+    print(f"  Total basic blocks: {len(blocks)}")
+    total_edges = sum(len(b['successors']) for b in blocks)
+    print(f"  Total CFG edges:    {total_edges}")
+    print()
+
+    print_section("Basic Blocks")
+    print(f"  {'ID':>4} {'Start Addr':>18} {'End Addr':>18} {'Instrs':>7}  Successors")
+    for blk in blocks:
+        succs = []
+        for (sid, etype) in blk['successors']:
+            succs.append(f"BB{sid}({etype})")
+        succ_str = ', '.join(succs) if succs else '(none)'
+        print(f"  {blk['id']:>4} {hex(blk['start']):>18} {hex(blk['end']):>18} {blk['num_instrs']:>7}  {succ_str}")
+
+    print_section("Function Entry Points")
+    if func_entries:
+        print(f"  {'Name':<30} {'Address':>18} {'Size':>10}  Block")
+        for func in func_entries:
+            bid = addr_to_block.get(func['addr'], 'N/A')
+            print(f"  {func['name']:<30} {hex(func['addr']):>18} {func['size']:>10}  BB{bid}")
+    else:
+        print("  (No FUNC type symbols found)")
+
+    base = os.path.splitext(os.path.basename(elf.filepath))[0]
+    if output_path is None:
+        output_path = f"{base}_cfg.dot"
+
+    num_lines = generate_cfg_dot(blocks, func_entries, output_path)
+    print_section("DOT Output")
+    print(f"  [+] CFG written to: {output_path} ({num_lines} lines)")
+    print(f"  Render with: dot -Tpng {output_path} -o {base}_cfg.png")
+
+
+# ============================================================
+# 版本信息显示
+# ============================================================
+
+def _parse_glibc_version(ver_str):
+    m = re.match(r'GLIBC_(\d+)\.(\d+)', ver_str)
+    if m:
+        return (int(m.group(1)), int(m.group(2)))
+    m2 = re.match(r'GLIBC_(\d+)\.(\d+)\.(\d+)', ver_str)
+    if m2:
+        return (int(m2.group(1)), int(m2.group(2)), int(m2.group(3)))
+    return None
+
+
+def print_versions(elf: ELFParser):
+    print_section("GNU Symbol Version Information")
+
+    if not elf.version_needs:
+        print("  (No .gnu.version_r section - no versioned dependencies)")
+    else:
+        print(f"  Total versioned libraries: {len(elf.version_needs)}")
+        print()
+
+        all_glibc_versions = []
+
+        for vn in elf.version_needs:
+            lib_name = vn['file'] or '(unknown)'
+            print_section(f"Library: {ccyan(lib_name)}")
+
+            version_syms_map = defaultdict(list)
+            for sym_idx, ver_label in elf.version_map.items():
+                if ver_label.startswith(lib_name + '@'):
+                    ver = ver_label.split('@', 1)[1]
+                    sym_name = elf.dynsym[sym_idx]['st_name_str'] if sym_idx < len(elf.dynsym) else f'sym_{sym_idx}'
+                    version_syms_map[ver].append(sym_name)
+
+            for aux in vn['version_entries']:
+                ver = aux['version']
+                glibc_ver = _parse_glibc_version(ver)
+                if glibc_ver:
+                    all_glibc_versions.append((glibc_ver, ver))
+
+                syms = version_syms_map.get(ver, [])
+                print(f"  Version: {cbold(ver)}  (idx={aux['ver_idx']}, hash={aux['hash']})")
+                if syms:
+                    print(f"    Symbols using this version ({len(syms)}):")
+                    for s in syms:
+                        print(f"      • {s}")
+                else:
+                    print(f"    (No symbols directly reference this version)")
+                print()
+
+        if all_glibc_versions:
+            all_glibc_versions.sort(key=lambda x: x[0])
+            min_ver = all_glibc_versions[0]
+            max_ver = all_glibc_versions[-1]
+            print_section("GLIBC Version Summary")
+            print(f"  Minimum required GLIBC: {cgreen(min_ver[1])}  {tuple(min_ver[0])}")
+            print(f"  Maximum referenced GLIBC: {cyellow(max_ver[1])}  {tuple(max_ver[0])}")
+            print(f"  All GLIBC versions referenced:")
+            for _, v in all_glibc_versions:
+                print(f"    • {v}")
+
+    if elf.version_syms:
+        print_section("Dynamic Symbol → Version Mapping")
+        printed = 0
+        for sv in elf.version_syms:
+            idx = sv['sym_index']
+            if idx >= len(elf.dynsym):
+                continue
+            sym_name = elf.dynsym[idx]['st_name_str']
+            if not sym_name:
+                continue
+            ver = elf.version_map.get(idx, '')
+            if ver and ver not in ('local', 'global'):
+                print(f"  {sym_name:<30} → {cyellow(ver)}")
+                printed += 1
+        if printed == 0:
+            print("  (No version-tagged dynamic symbols)")
+
+
+# ============================================================
+# 交互式浏览模式 (TUI)
+# ============================================================
+
+class ELFBrowser:
+    def __init__(self, elf: ELFParser):
+        self.elf = elf
+        self.left_items = []
+        self.expanded = set()
+        self.item_map = {}
+        self.left_scroll = 0
+        self.right_scroll = 0
+        self.left_cursor = 0
+        self.focus = 'left'
+        self.search_pattern = None
+        self.search_matches = set()
+        self.search_cur_match = 0
+        self._build_tree()
+
+    def _build_tree(self):
+        self.left_items = []
+        self.item_map = {}
+        idx = 0
+
+        self.left_items.append(('root_header', 'ELF File', idx))
+        self.item_map[idx] = {'type': 'header', 'title': 'ELF Header', 'collapsible': True}
+        idx += 1
+
+        self.left_items.append(('root_sections', f'Sections ({len(self.elf.section_headers)})', idx))
+        self.item_map[idx] = {'type': 'sections_root', 'title': 'Sections', 'collapsible': True}
+        idx += 1
+        for i, sec in enumerate(self.elf.section_headers):
+            name = sec['sh_name_str'] or f'section[{i}]'
+            self.left_items.append(('section', f'  [{i}] {name}', idx))
+            self.item_map[idx] = {'type': 'section', 'index': i, 'collapsible': False}
+            idx += 1
+
+        self.left_items.append(('root_segments', f'Program Headers ({len(self.elf.program_headers)})', idx))
+        self.item_map[idx] = {'type': 'segments_root', 'title': 'Program Headers', 'collapsible': True}
+        idx += 1
+        for i, ph in enumerate(self.elf.program_headers):
+            self.left_items.append(('segment', f'  [{i}] {ph["p_type_str"]}', idx))
+            self.item_map[idx] = {'type': 'segment', 'index': i, 'collapsible': False}
+            idx += 1
+
+        self.left_items.append(('root_symtab', f'Symbol Table (.symtab: {len(self.elf.symtab)})', idx))
+        self.item_map[idx] = {'type': 'symtab_root', 'title': '.symtab', 'collapsible': True}
+        idx += 1
+        sym_preview = self.elf.symtab[:50]
+        for i, sym in enumerate(sym_preview):
+            name = sym['st_name_str'] or '(no name)'
+            self.left_items.append(('symtab_sym', f'  [{i}] {name}', idx))
+            self.item_map[idx] = {'type': 'symtab_sym', 'index': i, 'collapsible': False}
+            idx += 1
+        if len(self.elf.symtab) > 50:
+            self.left_items.append(('symtab_more', f'  ... ({len(self.elf.symtab) - 50} more)', idx))
+            self.item_map[idx] = {'type': 'placeholder', 'collapsible': False}
+            idx += 1
+
+        self.left_items.append(('root_dynsym', f'Dynamic Symbols (.dynsym: {len(self.elf.dynsym)})', idx))
+        self.item_map[idx] = {'type': 'dynsym_root', 'title': '.dynsym', 'collapsible': True}
+        idx += 1
+        dyn_preview = self.elf.dynsym[:50]
+        for i, sym in enumerate(dyn_preview):
+            name = sym['st_name_str'] or '(no name)'
+            self.left_items.append(('dynsym_sym', f'  [{i}] {name}', idx))
+            self.item_map[idx] = {'type': 'dynsym_sym', 'index': i, 'collapsible': False}
+            idx += 1
+        if len(self.elf.dynsym) > 50:
+            self.left_items.append(('dynsym_more', f'  ... ({len(self.elf.dynsym) - 50} more)', idx))
+            self.item_map[idx] = {'type': 'placeholder', 'collapsible': False}
+            idx += 1
+
+    def _get_visible_items(self):
+        visible = []
+        expand_state = {
+            'root_header': True,
+            'root_sections': True,
+            'root_segments': False,
+            'root_symtab': False,
+            'root_dynsym': False,
+        }
+        for key, _ in self.expanded:
+            expand_state[key] = True
+            if key in ('root_segments', 'root_symtab', 'root_dynsym'):
+                pass
+
+        skip_until = None
+        for i, (item_key, display, idx) in enumerate(self.left_items):
+            if skip_until and item_key != skip_until and not item_key.startswith(skip_until.split('_')[0] if '_' in skip_until else ''):
+                skip_until = None
+
+            if item_key in ('root_sections', 'root_segments', 'root_symtab', 'root_dynsym', 'root_header'):
+                is_section_child = item_key.startswith('section') if item_key != 'root_sections' else False
+                visible.append((item_key, display, idx, 'root'))
+                if item_key == 'root_header' and expand_state.get('root_header', True):
+                    pass
+                elif item_key == 'root_sections' and not expand_state.get('root_sections', True):
+                    skip_until = 'segment'
+                elif item_key == 'root_segments' and not expand_state.get('root_segments', False):
+                    skip_until = 'symtab'
+                elif item_key == 'root_symtab' and not expand_state.get('root_symtab', False):
+                    skip_until = 'dynsym'
+                elif item_key == 'root_dynsym' and not expand_state.get('root_dynsym', False):
+                    skip_until = 'END'
+            else:
+                if skip_until == 'END':
+                    continue
+                if skip_until and not item_key.startswith(skip_until.split('_')[0] if '_' in skip_until and skip_until != 'segment' else skip_until):
+                    continue
+                if skip_until == 'segment' and item_key.startswith('root'):
+                    skip_until = None
+                if skip_until == 'symtab' and item_key.startswith('root'):
+                    skip_until = None
+                if skip_until == 'dynsym' and item_key.startswith('root'):
+                    skip_until = None
+                is_child = item_key.startswith('section') or item_key.startswith('segment') or \
+                           item_key.startswith('symtab_sym') or item_key.startswith('dynsym_sym') or \
+                           item_key.endswith('_more')
+                visible.append((item_key, display, idx, 'child' if is_child else 'root'))
+
+        filtered = []
+        in_hidden = False
+        for item_key, display, idx, level in visible:
+            if item_key == 'root_sections' and not expand_state.get('root_sections', True):
+                in_hidden = True
+                filtered.append((item_key, display, idx, level))
+                continue
+            if item_key == 'root_segments':
+                in_hidden = False
+            if in_hidden and item_key.startswith('section'):
+                continue
+
+            if item_key == 'root_segments' and not expand_state.get('root_segments', False):
+                in_hidden = True
+                filtered.append((item_key, display, idx, level))
+                continue
+            if in_hidden and item_key.startswith('segment'):
+                continue
+            if item_key == 'root_symtab':
+                in_hidden = False
+
+            if item_key == 'root_symtab' and not expand_state.get('root_symtab', False):
+                in_hidden = True
+                filtered.append((item_key, display, idx, level))
+                continue
+            if in_hidden and (item_key.startswith('symtab_') or item_key.endswith('_more') and 'symtab' in display.lower()):
+                continue
+            if item_key == 'root_dynsym':
+                in_hidden = False
+
+            if item_key == 'root_dynsym' and not expand_state.get('root_dynsym', False):
+                in_hidden = True
+                filtered.append((item_key, display, idx, level))
+                continue
+            if in_hidden and item_key.startswith('dynsym_'):
+                continue
+
+            filtered.append((item_key, display, idx, level))
+
+        return filtered
+
+    def _get_item_detail(self, item_key, item_idx):
+        info = self.item_map.get(item_idx)
+        if not info:
+            return ['(No details)']
+
+        t = info['type']
+        lines = []
+
+        if t == 'header':
+            h = self.elf.elf_header
+            lines = [
+                cbold("=== ELF Header ==="),
+                f"  Magic:       {h['e_ident_magic']}",
+                f"  Class:       {h['e_class_str']}",
+                f"  Data:        {h['e_data_str']}",
+                f"  OS/ABI:      {h['e_osabi_str']}",
+                f"  Type:        {h['e_type_str']}",
+                f"  Machine:     {h['e_machine_str']}",
+                f"  Entry:       {h['e_entry']}",
+                f"  File size:   {self.elf.size} bytes",
+                f"  Sections:    {len(self.elf.section_headers)}",
+                f"  Segments:    {len(self.elf.program_headers)}",
+            ]
+        elif t == 'section':
+            i = info['index']
+            sec = self.elf.section_headers[i]
+            lines = [cbold(f"=== Section [{i}]: {sec['sh_name_str'] or '(no name)'} ===")]
+            lines.append(f"  Type:        {sec['sh_type_str']}")
+            lines.append(f"  Address:     {sec['sh_addr']}")
+            lines.append(f"  Offset:      {sec['sh_offset']}")
+            lines.append(f"  Size:        {sec['sh_size']} bytes")
+            lines.append(f"  Link:        {sec['sh_link']}")
+            lines.append(f"  Info:        {sec['sh_info']}")
+            lines.append(f"  Alignment:   {sec['sh_addralign']}")
+            lines.append(f"  Entry size:  {sec['sh_entsize']}")
+            if sec['hex_preview']:
+                lines.append('')
+                lines.append(cbold("  Hex Preview (first 64 bytes):"))
+                hex_bytes = sec['hex_preview'].split()
+                for li in range(0, len(hex_bytes), 16):
+                    hl = hex_bytes[li:li + 16]
+                    padded = ' '.join(hl + ['  '] * (16 - len(hl)))
+                    ascii_str = sec['ascii_preview'][li:li + 16].ljust(16)
+                    off = sec['sh_offset_int'] + li
+                    lines.append(f"    {off:08x}  {padded}  |{ascii_str}|")
+        elif t == 'segment':
+            i = info['index']
+            ph = self.elf.program_headers[i]
+            lines = [cbold(f"=== Program Header [{i}]: {ph['p_type_str']} ===")]
+            lines.append(f"  Offset:      {ph['p_offset']}")
+            lines.append(f"  VirtAddr:    {ph['p_vaddr']}")
+            lines.append(f"  PhysAddr:    {ph['p_paddr']}")
+            lines.append(f"  FileSiz:     {hex(ph['p_filesz'])}")
+            lines.append(f"  MemSiz:      {hex(ph['p_memsz'])}")
+            lines.append(f"  Flags:       {ph['p_flags_str']}")
+            lines.append(f"  Alignment:   {hex(ph['p_align'])}")
+            if ph['interp']:
+                lines.append(f"  Interpreter: {ph['interp']}")
+        elif t == 'symtab_sym' or t == 'dynsym_sym':
+            i = info['index']
+            symtab = self.elf.symtab if t == 'symtab_sym' else self.elf.dynsym
+            if i < len(symtab):
+                sym = symtab[i]
+                ver_str = ''
+                if t == 'dynsym_sym':
+                    v = self.elf.version_map.get(i, '')
+                    if v and v not in ('local', 'global'):
+                        ver_str = f" [{v}]"
+                lines = [cbold(f"=== Symbol [{i}]: {sym['st_name_str'] or '(no name)'}{cyellow(ver_str)} ===")]
+                lines.append(f"  Value:       {sym['st_value']}")
+                lines.append(f"  Size:        {sym['st_size']} bytes")
+                lines.append(f"  Binding:     {sym['st_bind_str']}")
+                lines.append(f"  Type:        {sym['st_type_str']}")
+                lines.append(f"  Section:     {sym['st_shndx_str']}")
+            else:
+                lines = ['(Symbol index out of range)']
+        elif t == 'sections_root' or t == 'segments_root' or t == 'symtab_root' or t == 'dynsym_root':
+            title = info['title']
+            lines = [cbold(f"=== {title} ===")]
+            if t == 'sections_root':
+                lines.append(f"  Count: {len(self.elf.section_headers)}")
+                lines.append(f"  Total size: {sum(s['sh_size'] for s in self.elf.section_headers)} bytes")
+                lines.append("  Select a child section in the left panel for details.")
+            elif t == 'segments_root':
+                lines.append(f"  Count: {len(self.elf.program_headers)}")
+                lines.append("  Select a child segment in the left panel for details.")
+            elif t == 'symtab_root':
+                lines.append(f"  Count: {len(self.elf.symtab)}")
+                lines.append("  Select a child symbol in the left panel for details.")
+            elif t == 'dynsym_root':
+                lines.append(f"  Count: {len(self.elf.dynsym)}")
+                lines.append("  Select a child symbol in the left panel for details.")
+        else:
+            lines = ['(No details available)']
+
+        return lines
+
+    def _get_file_offset_at_cursor(self):
+        visible = self._get_visible_items()
+        if self.left_cursor >= len(visible):
+            return 0
+        item_key, display, idx, level = visible[self.left_cursor]
+        info = self.item_map.get(idx)
+        if not info:
+            return 0
+        t = info['type']
+        if t == 'section':
+            return self.elf.section_headers[info['index']]['sh_offset_int']
+        elif t == 'segment':
+            return self.elf.program_headers[info['index']]['p_offset_int']
+        return 0
+
+    def _run_search(self, pattern):
+        if not pattern:
+            self.search_pattern = None
+            self.search_matches = set()
+            return
+        self.search_pattern = pattern.lower()
+        self.search_matches = set()
+        try:
+            regex = re.compile(pattern, re.IGNORECASE)
+        except re.error:
+            regex = re.compile(re.escape(pattern), re.IGNORECASE)
+
+        visible = self._get_visible_items()
+        for i, (item_key, display, idx, level) in enumerate(visible):
+            txt = display.lower()
+            if regex.search(txt):
+                self.search_matches.add(i)
+
+            info = self.item_map.get(idx)
+            if info and info['type'] in ('section', 'segment', 'symtab_sym', 'dynsym_sym'):
+                details = self._get_item_detail(item_key, idx)
+                for dline in details:
+                    if regex.search(dline.lower()):
+                        self.search_matches.add(i)
+                        break
+
+        self.search_cur_match = 0
+        if self.search_matches:
+            sorted_matches = sorted(self.search_matches)
+            if self.left_cursor in sorted_matches:
+                self.search_cur_match = sorted_matches.index(self.left_cursor)
+            else:
+                self.left_cursor = sorted_matches[0]
+                self.search_cur_match = 0
+
+    def run(self, stdscr):
+        curses.curs_set(0)
+        stdscr.keypad(1)
+
+        while True:
+            max_y, max_x = stdscr.getmaxyx()
+            status_h = 2
+            left_w = max_x // 3
+            right_w = max_x - left_w - 1
+            content_h = max_y - status_h - 1
+
+            if content_h < 5 or left_w < 20:
+                stdscr.clear()
+                stdscr.addstr(0, 0, "Terminal too small!")
+                stdscr.refresh()
+                stdscr.getch()
+                continue
+
+            stdscr.erase()
+
+            visible = self._get_visible_items()
+            if self.left_cursor >= len(visible):
+                self.left_cursor = max(0, len(visible) - 1)
+            if self.left_cursor < 0:
+                self.left_cursor = 0
+
+            if self.left_cursor < self.left_scroll:
+                self.left_scroll = self.left_cursor
+            if self.left_cursor >= self.left_scroll + content_h:
+                self.left_scroll = self.left_cursor - content_h + 1
+
+            cur_item_key = None
+            cur_item_idx = None
+            if visible:
+                cur_item_key, _, cur_item_idx, _ = visible[self.left_cursor]
+
+            for i in range(content_h):
+                vis_idx = self.left_scroll + i
+                if vis_idx >= len(visible):
+                    break
+                item_key, display, idx, level = visible[vis_idx]
+
+                attr = 0
+                is_match = vis_idx in self.search_matches
+                is_current = (vis_idx == self.left_cursor and self.focus == 'left')
+                if is_current:
+                    attr = curses.A_REVERSE
+                if is_match and not is_current:
+                    attr |= curses.A_BOLD
+                if is_match and is_current:
+                    attr = curses.A_BOLD | curses.A_REVERSE
+
+                info = self.item_map.get(idx)
+                prefix = ' '
+                if info and info.get('collapsible'):
+                    is_exp = True
+                    if item_key == 'root_segments':
+                        is_exp = ('root_segments',) in self.expanded
+                    elif item_key == 'root_symtab':
+                        is_exp = ('root_symtab',) in self.expanded
+                    elif item_key == 'root_dynsym':
+                        is_exp = ('root_dynsym',) in self.expanded
+                    elif item_key == 'root_sections':
+                        is_exp = ('root_sections',) not in self.expanded
+                    elif item_key == 'root_header':
+                        is_exp = True
+                    prefix = '▼ ' if is_exp else '▶ '
+
+                try:
+                    disp = prefix + display
+                    disp = disp[:left_w - 1]
+                    stdscr.addstr(i, 0, disp.ljust(left_w), attr)
+                except curses.error:
+                    pass
+
+            for i in range(content_h):
+                try:
+                    stdscr.addch(i, left_w, curses.ACS_VLINE)
+                except curses.error:
+                    pass
+
+            detail_lines = []
+            if cur_item_key is not None and cur_item_idx is not None:
+                detail_lines = self._get_item_detail(cur_item_key, cur_item_idx)
+
+            if self.right_scroll >= len(detail_lines):
+                self.right_scroll = max(0, len(detail_lines) - content_h)
+            if self.right_scroll < 0:
+                self.right_scroll = 0
+
+            for i in range(content_h):
+                line_idx = self.right_scroll + i
+                if line_idx >= len(detail_lines):
+                    break
+                line = detail_lines[line_idx]
+                line_stripped = re.sub(r'\x1b\[[0-9;]*m', '', line)
+                line_stripped = line_stripped[:right_w - 2]
+                attr = 0
+                if self.focus == 'right':
+                    attr = 0
+                try:
+                    stdscr.addstr(i, left_w + 2, line_stripped, attr)
+                except curses.error:
+                    pass
+
+            try:
+                stdscr.hline(content_h, 0, curses.ACS_HLINE, max_x)
+            except curses.error:
+                pass
+
+            filename = os.path.basename(self.elf.filepath)
+            offset = self._get_file_offset_at_cursor()
+            status_line1 = f" File: {filename} | Size: {self.elf.size} bytes | Cursor offset: 0x{offset:x} ({offset})"
+            status_line2 = f" [↑/↓] Navigate | [←/→] Tab switch | [Enter] Expand/Collapse | [/] Search | [n] Next match | [q] Quit "
+            if self.focus == 'left':
+                status_line2 += "| Focus: LEFT PANEL "
+            else:
+                status_line2 += "| Focus: RIGHT PANEL "
+            if self.search_pattern:
+                matches = sorted(self.search_matches)
+                cur = ''
+                if self.left_cursor in matches:
+                    cur = f" {matches.index(self.left_cursor) + 1}/{len(matches)}"
+                status_line2 += f"| Search: '{self.search_pattern}'{cur} "
+
+            try:
+                status1 = status_line1[:max_x - 1]
+                stdscr.addstr(content_h + 1, 0, status1.ljust(max_x), curses.A_REVERSE)
+                status2 = status_line2[:max_x - 1]
+                if max_y > content_h + 2:
+                    stdscr.addstr(content_h + 2, 0, status2.ljust(max_x), curses.A_DIM)
+            except curses.error:
+                pass
+
+            stdscr.refresh()
+            key = stdscr.getch()
+
+            if key == ord('q') or key == 27:
+                break
+            elif key == ord('\t') or key == curses.KEY_RIGHT or key == curses.KEY_LEFT:
+                if key == curses.KEY_RIGHT:
+                    self.focus = 'right'
+                elif key == curses.KEY_LEFT:
+                    self.focus = 'left'
+                else:
+                    self.focus = 'right' if self.focus == 'left' else 'left'
+            elif key == curses.KEY_UP:
+                if self.focus == 'left' and visible:
+                    self.left_cursor = max(0, self.left_cursor - 1)
+                elif self.focus == 'right':
+                    self.right_scroll = max(0, self.right_scroll - 1)
+            elif key == curses.KEY_DOWN:
+                if self.focus == 'left' and visible:
+                    self.left_cursor = min(len(visible) - 1, self.left_cursor + 1)
+                elif self.focus == 'right':
+                    self.right_scroll = min(max(0, len(detail_lines) - content_h), self.right_scroll + 1)
+            elif key == curses.KEY_PPAGE:
+                if self.focus == 'left':
+                    self.left_cursor = max(0, self.left_cursor - content_h)
+                else:
+                    self.right_scroll = max(0, self.right_scroll - content_h)
+            elif key == curses.KEY_NPAGE:
+                if self.focus == 'left' and visible:
+                    self.left_cursor = min(len(visible) - 1, self.left_cursor + content_h)
+                else:
+                    self.right_scroll = min(max(0, len(detail_lines) - content_h), self.right_scroll + content_h)
+            elif key == curses.KEY_HOME:
+                if self.focus == 'left':
+                    self.left_cursor = 0
+                else:
+                    self.right_scroll = 0
+            elif key == curses.KEY_END:
+                if self.focus == 'left' and visible:
+                    self.left_cursor = len(visible) - 1
+                else:
+                    self.right_scroll = max(0, len(detail_lines) - content_h)
+            elif key == ord('\n') or key == curses.KEY_ENTER:
+                if visible and self.focus == 'left':
+                    item_key, _, idx, _ = visible[self.left_cursor]
+                    info = self.item_map.get(idx)
+                    if info and info.get('collapsible') and item_key.startswith('root_'):
+                        ek = (item_key,)
+                        if item_key == 'root_header':
+                            continue
+                        if ek in self.expanded:
+                            self.expanded.discard(ek)
+                        else:
+                            self.expanded.add(ek)
+            elif key == ord('/'):
+                curses.echo()
+                curses.curs_set(1)
+                try:
+                    prompt = "Search: "
+                    if max_y > 0:
+                        stdscr.addstr(max_y - 1, 0, prompt.ljust(max_x), curses.A_REVERSE)
+                    stdscr.refresh()
+                    search_buf = ""
+                    while True:
+                        ch = stdscr.getch(max_y - 1, len(prompt) + len(search_buf))
+                        if ch == 27:
+                            curses.noecho()
+                            curses.curs_set(0)
+                            search_buf = ""
+                            break
+                        elif ch in (curses.KEY_ENTER, ord('\n'), 13):
+                            curses.noecho()
+                            curses.curs_set(0)
+                            break
+                        elif ch in (curses.KEY_BACKSPACE, 127, 8):
+                            search_buf = search_buf[:-1]
+                            clr = " " * (max_x - len(prompt) - len(search_buf) - 1)
+                            stdscr.addstr(max_y - 1, len(prompt), search_buf + clr)
+                            stdscr.move(max_y - 1, len(prompt) + len(search_buf))
+                        elif 32 <= ch < 127 and len(prompt) + len(search_buf) < max_x - 1:
+                            search_buf += chr(ch)
+                            stdscr.addch(max_y - 1, len(prompt) + len(search_buf) - 1, ch)
+                    self._run_search(search_buf.strip())
+                except curses.error:
+                    curses.noecho()
+                    curses.curs_set(0)
+            elif key == ord('n') or key == ord('N'):
+                if self.search_matches:
+                    matches = sorted(self.search_matches)
+                    if matches:
+                        cur_pos = self.left_cursor
+                        if key == ord('n'):
+                            try:
+                                ci = matches.index(cur_pos)
+                                self.left_cursor = matches[(ci + 1) % len(matches)]
+                            except ValueError:
+                                self.left_cursor = matches[0]
+                        else:
+                            try:
+                                ci = matches.index(cur_pos)
+                                self.left_cursor = matches[(ci - 1) % len(matches)]
+                            except ValueError:
+                                self.left_cursor = matches[-1]
+
+
+def run_browse(elf: ELFParser):
+    print(f"Launching interactive browser for: {elf.filepath}")
+    print(f"Terminal: {os.environ.get('TERM', 'unknown')}")
+    try:
+        browser = ELFBrowser(elf)
+        curses.wrapper(browser.run)
+    except curses.error as e:
+        print(f"Error initializing curses: {e}")
+        print("Make sure you're running in a terminal with proper TERM setting.")
+    except KeyboardInterrupt:
+        pass
+    print("\nExited browser.")
+
+
 def generate_text_report(elf: ELFParser) -> str:
     import io
     old_stdout = sys.stdout
@@ -1244,6 +2793,32 @@ def cmd_export(args):
         print(f"[+] Report exported to: {args.output}")
 
 
+def cmd_dynamic(args):
+    elf = ELFParser(args.binary)
+    print_dynamic(elf)
+
+
+def cmd_cfg(args):
+    elf = ELFParser(args.binary)
+    output = args.output if hasattr(args, 'output') else None
+    print_cfg(elf, output_path=output)
+
+
+def cmd_security(args):
+    elf = ELFParser(args.binary)
+    print_security(elf)
+
+
+def cmd_versions(args):
+    elf = ELFParser(args.binary)
+    print_versions(elf)
+
+
+def cmd_browse(args):
+    elf = ELFParser(args.binary)
+    run_browse(elf)
+
+
 def main():
     parser = argparse.ArgumentParser(
         prog='elfparse.py',
@@ -1259,6 +2834,11 @@ Examples:
   python elfparse.py strings hello_elf --encoding utf-16
   python elfparse.py diff hello_elf dyn_elf      Compare two ELF files
   python elfparse.py export hello_elf --json -o out.json
+  python elfparse.py dynamic dyn_elf             Deep parse .dynamic section
+  python elfparse.py cfg hello_elf -o cfg.dot    Generate CFG in DOT format
+  python elfparse.py security hello_elf          Check security hardening features
+  python elfparse.py versions dyn_elf            Show GNU symbol version info
+  python elfparse.py browse hello_elf            Interactive TUI browser
         """
     )
     subparsers = parser.add_subparsers(dest='command', required=True)
@@ -1276,7 +2856,7 @@ Examples:
     p_sec.set_defaults(func=cmd_sections)
 
     # symbols subcommand
-    p_sym = subparsers.add_parser('symbols', help='Parse .symtab and .dynsym symbol tables')
+    p_sym = subparsers.add_parser('symbols', help='Parse .symtab and .dynsym symbol tables (with version tags)')
     p_sym.add_argument('binary', help='ELF binary file path')
     p_sym.add_argument('--search', help='Fuzzy search symbol names (regex supported)')
     p_sym.set_defaults(func=cmd_symbols)
@@ -1308,6 +2888,32 @@ Examples:
     p_exp.add_argument('-o', '--output', required=True, help='Output file path')
     p_exp.add_argument('--json', action='store_true', help='Export as JSON (default: text report)')
     p_exp.set_defaults(func=cmd_export)
+
+    # dynamic subcommand
+    p_dyn = subparsers.add_parser('dynamic', help='Deep parse .dynamic section (DT_NEEDED, paths, init funcs, etc.)')
+    p_dyn.add_argument('binary', help='ELF binary file path')
+    p_dyn.set_defaults(func=cmd_dynamic)
+
+    # cfg subcommand
+    p_cfg = subparsers.add_parser('cfg', help='Generate control flow graph (CFG) in DOT format from .text')
+    p_cfg.add_argument('binary', help='ELF binary file path')
+    p_cfg.add_argument('-o', '--output', help='Output DOT file path (default: <name>_cfg.dot)')
+    p_cfg.set_defaults(func=cmd_cfg)
+
+    # security subcommand
+    p_sec2 = subparsers.add_parser('security', help='Check ELF security hardening features (RELRO/Canary/PIE/NX/FORTIFY)')
+    p_sec2.add_argument('binary', help='ELF binary file path')
+    p_sec2.set_defaults(func=cmd_security)
+
+    # versions subcommand
+    p_ver = subparsers.add_parser('versions', help='Parse .gnu.version and .gnu.version_r for symbol version info')
+    p_ver.add_argument('binary', help='ELF binary file path')
+    p_ver.set_defaults(func=cmd_versions)
+
+    # browse subcommand
+    p_br = subparsers.add_parser('browse', help='Interactive TUI browser for ELF structure')
+    p_br.add_argument('binary', help='ELF binary file path')
+    p_br.set_defaults(func=cmd_browse)
 
     args = parser.parse_args()
     try:
